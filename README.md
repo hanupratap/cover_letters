@@ -22,4 +22,4 @@ Key flags:
 - `--skip-pdf` to only emit text; `--quiet` to silence info logs when Automator is calling.
 - `--model`, `--pdf-out`, `--text-out` customize generation and outputs.
 
-The PDF filename defaults to `CoverLetter.pdf` in `/Users/hanu/Documents/Personal/Cover letters` if `--pdf-out` is omitted.
+The PDF filename defaults to the model-provided `companyName_title.pdf` in `/Users/hanu/Documents/Personal/Cover letters` when `--pdf-out` is omitted.

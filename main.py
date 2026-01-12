@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 from textwrap import dedent, wrap
@@ -131,7 +132,11 @@ def build_prompt(job_description: str) -> str:
         - 120-180 words
         - Match the tone and structure of the sample
         - Do NOT invent metrics or offers
-        - Output only the final letter text
+        - Return a JSON object with keys "filename" and "letter"
+        - "filename" must be companyName_title using underscores instead of spaces (ASCII letters/numbers/underscore only, no extension)
+        - "letter" must be the final letter text only
+        - Encode line breaks in "letter" as \\n so the JSON is valid
+        - Do not wrap the JSON in code fences
         - Tailor the letter to the job description if provided; otherwise keep it general
         - Use the company name and role title from the job description; do not leave placeholders
 
@@ -147,7 +152,60 @@ def build_prompt(job_description: str) -> str:
     ).strip()
 
 
-def generate_letter_text(client: OpenAI, prompt: str, model: str) -> str:
+def unwrap_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+    return stripped
+
+
+def parse_llm_payload(raw_content: str) -> tuple[str, str]:
+    cleaned = unwrap_code_fence(raw_content)
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.error("[red]Invalid JSON from LLM output.[/red]")
+        raise ValueError("LLM output was not valid JSON.") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("LLM output JSON must be an object.")
+
+    filename = str(payload.get("filename", "")).strip()
+    letter_text = str(payload.get("letter", "")).strip()
+
+    if not filename:
+        raise ValueError("LLM output missing filename.")
+    if not letter_text:
+        raise ValueError("LLM output missing letter text.")
+    if "/" in filename or "\\" in filename:
+        raise ValueError("LLM filename must not include path separators.")
+
+    if filename.lower().endswith(".pdf"):
+        filename = filename[:-4]
+    if filename.lower().endswith(".txt"):
+        filename = filename[:-4]
+
+    filename = filename.strip()
+    if not filename:
+        raise ValueError("LLM output filename is empty after cleanup.")
+    if not filename.isascii():
+        raise ValueError("LLM filename must use ASCII characters only.")
+    if " " in filename:
+        raise ValueError("LLM filename must use underscores instead of spaces.")
+    if not all(ch.isalnum() or ch == "_" for ch in filename):
+        raise ValueError(
+            "LLM filename must contain only letters, numbers, and underscores."
+        )
+
+    return filename, letter_text
+
+
+def generate_letter_payload(client: OpenAI, prompt: str, model: str) -> tuple[str, str]:
     try:
         logger.info("Calling OpenAI API...")
         response = client.chat.completions.create(
@@ -159,11 +217,12 @@ def generate_letter_text(client: OpenAI, prompt: str, model: str) -> str:
         logger.error(f"[red]API call failed: {exc}[/red]")
         raise
 
-    return response.choices[0].message.content.strip()
+    content = response.choices[0].message.content.strip()
+    return parse_llm_payload(content)
 
 
-def default_pdf_path() -> Path:
-    return BASE_OUTPUT_DIR / "CoverLetter.pdf"
+def default_pdf_path(filename: str) -> Path:
+    return BASE_OUTPUT_DIR / f"{filename}.pdf"
 
 
 def write_pdf(letter_text: str, output_path: Path) -> None:
@@ -220,7 +279,9 @@ def main() -> None:
 
     logger.info("Generating cover letter from job description")
     client = OpenAI()
-    letter_text = generate_letter_text(client=client, prompt=prompt, model=args.model)
+    filename, letter_text = generate_letter_payload(
+        client=client, prompt=prompt, model=args.model
+    )
 
     # Always print the letter text so Automator or shell callers can capture it.
     print(letter_text)
@@ -229,7 +290,7 @@ def main() -> None:
         write_text_file(letter_text, args.text_out)
 
     if not args.skip_pdf:
-        pdf_path = args.pdf_out or default_pdf_path()
+        pdf_path = args.pdf_out or default_pdf_path(filename)
         write_pdf(letter_text, pdf_path)
 
 
