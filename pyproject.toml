@@ -1,0 +1,12 @@
+[project]
+name = "cover-letters"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "openai>=2.15.0",
+    "reportlab>=4.4.7",
+    "rich>=14.2.0",
+]
