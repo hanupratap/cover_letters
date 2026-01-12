@@ -14,12 +14,13 @@ Capture the generated letter from stdout (for Automator) and optionally write fi
 python main.py \
   --company "Jane Street" \
   --title "Quantitative Researcher" \
-  --location "New York" \
+  --job-description "Build and research systematic trading strategies..." \
   --pdf-out CoverLetter_JaneStreet.pdf \
   --text-out CoverLetter_JaneStreet.txt
 ```
 
 Key flags:
+- `--job-description` is required; pass text directly or a path to a `.txt` file.
 - `--skip-pdf` to only emit text; `--quiet` to silence info logs when Automator is calling.
 - `--model`, `--pdf-out`, `--text-out` customize generation and outputs.
 

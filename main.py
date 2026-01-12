@@ -90,7 +90,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("-c", "--company", required=True, help="Target company name (used in prompt and filename).")
     parser.add_argument("-t", "--title", "--role", dest="title", required=True, help="Role title.")
-    parser.add_argument("-l", "--location", required=True, help="Job location to include in the letter.")
+    parser.add_argument(
+        "-j",
+        "--job-description",
+        required=True,
+        help="Job description text or a path to a .txt file containing it.",
+    )
     parser.add_argument(
         "--model",
         default="gpt-4-turbo",
@@ -119,7 +124,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_prompt(company: str, title: str, location: str) -> str:
+def build_prompt(company: str, title: str, job_description: str) -> str:
     return dedent(
         f"""
         Write a professional cover letter.
@@ -130,10 +135,12 @@ def build_prompt(company: str, title: str, location: str) -> str:
         - Match the tone and structure of the sample
         - Do NOT invent metrics or offers
         - Output only the final letter text
+        - Tailor the letter to the job description if provided; otherwise keep it general
 
         Company: {company}
         Role: {title}
-        Location: {location}
+        Job description (optional):
+        {job_description}
 
         Candidate summary:
         {DEFAULT_SUMMARY}
@@ -198,16 +205,28 @@ def write_text_file(letter_text: str, output_path: Path) -> None:
     logger.info(f"[green]✓ Saved text to {output_path}[/green]")
 
 
+def load_job_description(value: str) -> str:
+    candidate_path = Path(value)
+    if candidate_path.exists():
+        return candidate_path.read_text(encoding="utf-8").strip()
+    return value.strip()
+
+
 def main() -> None:
     args = parse_args()
     if args.quiet:
         logger.setLevel(logging.WARNING)
 
-    prompt = build_prompt(company=args.company, title=args.title, location=args.location)
+    job_description = load_job_description(args.job_description)
+    prompt = build_prompt(
+        company=args.company,
+        title=args.title,
+        job_description=job_description,
+    )
 
     logger.info(
         f"Generating cover letter for {args.company} "
-        f"([yellow]{args.title}[/yellow], {args.location})"
+        f"([yellow]{args.title}[/yellow])"
     )
     client = OpenAI()
     letter_text = generate_letter_text(client=client, prompt=prompt, model=args.model)
