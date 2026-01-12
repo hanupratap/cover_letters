@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 from pathlib import Path
 from textwrap import dedent, wrap
 
@@ -86,10 +85,8 @@ DEFAULT_SAMPLE_LETTER = dedent(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a cover letter (text + PDF) using fixed summary/sample and OpenAI."
+        description="Generate a cover letter (text + PDF) from a job description using OpenAI."
     )
-    parser.add_argument("-c", "--company", required=True, help="Target company name (used in prompt and filename).")
-    parser.add_argument("-t", "--title", "--role", dest="title", required=True, help="Role title.")
     parser.add_argument(
         "-j",
         "--job-description",
@@ -124,7 +121,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_prompt(company: str, title: str, job_description: str) -> str:
+def build_prompt(job_description: str) -> str:
     return dedent(
         f"""
         Write a professional cover letter.
@@ -136,9 +133,8 @@ def build_prompt(company: str, title: str, job_description: str) -> str:
         - Do NOT invent metrics or offers
         - Output only the final letter text
         - Tailor the letter to the job description if provided; otherwise keep it general
+        - Use the company name and role title from the job description; do not leave placeholders
 
-        Company: {company}
-        Role: {title}
         Job description (optional):
         {job_description}
 
@@ -166,10 +162,8 @@ def generate_letter_text(client: OpenAI, prompt: str, model: str) -> str:
     return response.choices[0].message.content.strip()
 
 
-def default_pdf_path(company: str) -> Path:
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "", company)
-    cleaned = cleaned or "CoverLetter"
-    return BASE_OUTPUT_DIR / f"CoverLetter_{cleaned}.pdf"
+def default_pdf_path() -> Path:
+    return BASE_OUTPUT_DIR / "CoverLetter.pdf"
 
 
 def write_pdf(letter_text: str, output_path: Path) -> None:
@@ -207,8 +201,12 @@ def write_text_file(letter_text: str, output_path: Path) -> None:
 
 def load_job_description(value: str) -> str:
     candidate_path = Path(value)
-    if candidate_path.exists():
-        return candidate_path.read_text(encoding="utf-8").strip()
+    try:
+        if candidate_path.exists():
+            return candidate_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        # Treat overly long or invalid paths as inline text.
+        return value.strip()
     return value.strip()
 
 
@@ -218,16 +216,9 @@ def main() -> None:
         logger.setLevel(logging.WARNING)
 
     job_description = load_job_description(args.job_description)
-    prompt = build_prompt(
-        company=args.company,
-        title=args.title,
-        job_description=job_description,
-    )
+    prompt = build_prompt(job_description=job_description)
 
-    logger.info(
-        f"Generating cover letter for {args.company} "
-        f"([yellow]{args.title}[/yellow])"
-    )
+    logger.info("Generating cover letter from job description")
     client = OpenAI()
     letter_text = generate_letter_text(client=client, prompt=prompt, model=args.model)
 
@@ -238,7 +229,7 @@ def main() -> None:
         write_text_file(letter_text, args.text_out)
 
     if not args.skip_pdf:
-        pdf_path = args.pdf_out or default_pdf_path(args.company)
+        pdf_path = args.pdf_out or default_pdf_path()
         write_pdf(letter_text, pdf_path)
 
 

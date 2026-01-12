@@ -1,6 +1,6 @@
 ## Cover Letter Generator
 
-CLI script that turns a fixed candidate summary + fixed sample letter into a tailored cover letter using the OpenAI API, then saves it as text and an optional PDF.
+CLI script that turns a fixed candidate summary + fixed sample letter into a tailored cover letter using the OpenAI API, based on a job description, then saves it as text and an optional PDF.
 
 ### Setup
 - Python 3.13+
@@ -12,9 +12,7 @@ Capture the generated letter from stdout (for Automator) and optionally write fi
 
 ```bash
 python main.py \
-  --company "Jane Street" \
-  --title "Quantitative Researcher" \
-  --job-description "Build and research systematic trading strategies..." \
+  --job-description /path/to/jd.txt \
   --pdf-out CoverLetter_JaneStreet.pdf \
   --text-out CoverLetter_JaneStreet.txt
 ```
@@ -24,4 +22,4 @@ Key flags:
 - `--skip-pdf` to only emit text; `--quiet` to silence info logs when Automator is calling.
 - `--model`, `--pdf-out`, `--text-out` customize generation and outputs.
 
-The PDF filename defaults to `CoverLetter_<Company>.pdf` in `/Users/hanu/Documents/Personal/Cover letters` if `--pdf-out` is omitted.
+The PDF filename defaults to `CoverLetter.pdf` in `/Users/hanu/Documents/Personal/Cover letters` if `--pdf-out` is omitted.
