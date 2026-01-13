@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from textwrap import wrap
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel, field_validator
 from reportlab.lib.pagesizes import LETTER
-from reportlab.pdfgen import canvas
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from rich.logging import RichHandler
 
 load_dotenv()
@@ -32,12 +32,12 @@ DEFAULT_LLM_MODEL = "gpt-4o"
 
 # PDF layout constants
 PDF_PAGE_SIZE = LETTER
-PDF_X_MARGIN = 72
-PDF_Y_MARGIN = 72
+PDF_MARGIN = 72
 PDF_FONT_NAME = "Helvetica"
-PDF_FONT_SIZE = 12
-PDF_LINE_HEIGHT = 14
-PDF_WRAP_WIDTH = 95
+PDF_FONT_SIZE = 11
+PDF_LINE_HEIGHT = 15
+PDF_PARAGRAPH_SPACING = 10
+PDF_PARAGRAPH_SPACER = 2
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,38 +157,37 @@ def default_pdf_path(filename: str) -> Path:
     return BASE_OUTPUT_DIR / f"{filename}.pdf"
 
 
-def _draw_paragraph(c: canvas.Canvas, text: str, y: float) -> float:
-    """Draw a paragraph and return the new y position."""
-    lines = wrap(text, PDF_WRAP_WIDTH)
-    for line in lines:
-        c.drawString(PDF_X_MARGIN, y, line)
-        y -= PDF_LINE_HEIGHT
-    return y - PDF_LINE_HEIGHT
-
-
-def _reset_page(c: canvas.Canvas) -> float:
-    """Start a new page and return the top y position."""
-    c.showPage()
-    c.setFont(PDF_FONT_NAME, PDF_FONT_SIZE)
-    _, height = PDF_PAGE_SIZE
-    return height - PDF_Y_MARGIN
-
-
 def write_pdf(letter_text: str, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info(f"Generating PDF: [yellow]{output_path}[/yellow]")
-    
-    c = canvas.Canvas(str(output_path), pagesize=PDF_PAGE_SIZE)
-    _, height = PDF_PAGE_SIZE
-    c.setFont(PDF_FONT_NAME, PDF_FONT_SIZE)
-    y = height - PDF_Y_MARGIN
-    
+
+    doc = SimpleDocTemplate(
+        str(output_path),
+        pagesize=PDF_PAGE_SIZE,
+        leftMargin=PDF_MARGIN,
+        rightMargin=PDF_MARGIN,
+        topMargin=PDF_MARGIN,
+        bottomMargin=PDF_MARGIN,
+    )
+
+    styles = getSampleStyleSheet()
+    body = ParagraphStyle(
+        "Body",
+        parent=styles["Normal"],
+        fontName=PDF_FONT_NAME,
+        fontSize=PDF_FONT_SIZE,
+        leading=PDF_LINE_HEIGHT,
+        spaceAfter=PDF_PARAGRAPH_SPACING,
+    )
+
+    story: list[Paragraph | Spacer] = []
     for paragraph in letter_text.split("\n\n"):
-        y = _draw_paragraph(c, paragraph, y)
-        if y < PDF_Y_MARGIN:
-            y = _reset_page(c)
-    
-    c.save()
+        if not paragraph.strip():
+            continue
+        story.append(Paragraph(paragraph.replace("\n", "<br/>"), body))
+        story.append(Spacer(1, PDF_PARAGRAPH_SPACER))
+
+    doc.build(story)
     logger.info(f"[green bold]✓ Saved {output_path}[/green bold]")
 
 
